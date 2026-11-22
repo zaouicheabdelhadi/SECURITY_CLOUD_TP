@@ -4,26 +4,26 @@ hosts:
   - name: attacker
     base_box:
       image: seed
-      mgmt_user: debian
+      mgmt_user: ubuntu
     flavor: m1.medium
 
   - name: server
     base_box:
       image: seed
-      mgmt_user: debian
+      mgmt_user: ubuntu
     flavor: m1.medium
 
   - name: client
     base_box:
       image: seed
-      mgmt_user: debian
+      mgmt_user: ubuntu
     flavor: m1.medium
 
 routers:
   - name: router
     base_box:
       image: debian-12-x86_64
-      mgmt_user: debian
+      mgmt_user: ubuntu
     flavor: m1.medium
 
 wan:
