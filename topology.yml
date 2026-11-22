@@ -10,7 +10,7 @@ hosts:
   - name: server
     base_box:
       image: seed
-      mgmt_user: debian   #utilisateur utiliser pour administrer la machine 
+      mgmt_user: debian
     flavor: m1.medium
 
   - name: client
@@ -41,7 +41,7 @@ networks:
 
 net_mappings:
   - host: attacker
-    network: lan-switch    #nom de reseau virtuel
+    network: lan-switch
     ip: 10.1.26.23
 
   - host: server

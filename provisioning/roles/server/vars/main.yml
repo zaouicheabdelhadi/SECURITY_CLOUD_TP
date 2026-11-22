@@ -21,7 +21,12 @@ telnet_password: 'VictimPass2025'
 #     Labs handout so answers can't be copy/pasted from the PDF) --------
 telnet_port: 2323
 radio_stream_port: 9091
-syn_backlog: 333
+# Kept deliberately SMALL: the SEED Labs PDF itself warns that Scapy's
+# packet rate is much lower than netwox's, so with this sandbox being
+# Scapy-only, a large (realistic) backlog would never fill in reasonable
+# time. 8 is still a custom, non-default value students must read via
+# sysctl - it is NOT the point of the exercise to guess a huge number.
+syn_backlog: 8
 
 # --- Flags ----------------------------------------------------------------
 hijack_proof_token: "TCPHIJACK-9f41"
