@@ -1,0 +1,31 @@
+#!/usr/bin/expect -f
+#
+# Keeps a telnet session open between the client and the server, logging
+# in as the "victim" account and then idling. This is the live, legitimate
+# session that the TCP RST and TCP session hijacking levels target.
+# systemd restarts this script whenever the session drops (either because
+# it ended naturally, or because a student just RST'd / hijacked it).
+
+set server_ip   [lindex $argv 0]
+set telnet_port [lindex $argv 1]
+set username    [lindex $argv 2]
+set password    [lindex $argv 3]
+
+log_user 1
+set timeout 20
+
+spawn telnet $server_ip $telnet_port
+expect "login:"
+send "$username\r"
+expect "Password:"
+send "$password\r"
+expect "$ "
+
+# Idle loop: send an innocuous keepalive command periodically so the
+# connection generates visible TCP traffic to sniff, without doing
+# anything that would overwrite evidence files from a hijack attempt.
+while {1} {
+    send "echo keepalive\r"
+    expect "$ "
+    sleep 5
+}

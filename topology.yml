@@ -1,0 +1,60 @@
+name: tcpip-attack-lab
+
+hosts:
+  - name: attacker
+    base_box:
+      image: seed
+      mgmt_user: debian
+    flavor: m1.medium
+
+  - name: server
+    base_box:
+      image: seed
+      mgmt_user: debian   #utilisateur utiliser pour administrer la machine 
+    flavor: m1.medium
+
+  - name: client
+    base_box:
+      image: seed
+      mgmt_user: debian
+    flavor: m1.medium
+
+routers:
+  - name: router
+    base_box:
+      image: debian-12-x86_64
+      mgmt_user: debian
+    flavor: m1.medium
+
+wan:
+  name: internet-connection
+  cidr: 100.100.100.0/24
+
+networks:
+  # attacker, server and client all sit on the SAME broadcast domain on
+  # purpose: the TCP/IP Attack Lab (SEED Labs) assumes the attacker can
+  # sniff the client<->server traffic to read sequence/ack numbers and
+  # source ports, so they cannot be split across separate switches.
+  - name: lan-switch
+    cidr: 10.1.26.0/24
+    accessible_by_user: True
+
+net_mappings:
+  - host: attacker
+    network: lan-switch    #nom de reseau virtuel
+    ip: 10.1.26.23
+
+  - host: server
+    network: lan-switch
+    ip: 10.1.26.9
+
+  - host: client
+    network: lan-switch
+    ip: 10.1.26.4
+
+router_mappings:
+  - router: router
+    network: lan-switch
+    ip: 10.1.26.1
+
+groups: []

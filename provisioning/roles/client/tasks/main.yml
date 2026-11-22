@@ -1,0 +1,72 @@
+---
+- name: Adding aliases
+  loop: "{{ aliases | dict2items }}"
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.value }} {{ item.key }}"
+
+- name: Install client-side tooling
+  apt:
+    name:
+      - expect
+      - telnet
+      - sshpass
+      - openssh-client
+      - netcat-openbsd
+    update_cache: yes
+
+# --- Persistent telnet session (RST / hijacking target) ----------------
+- name: Deploy telnet session script
+  copy:
+    src: telnet_session.exp
+    dest: /usr/local/bin/telnet_session.exp
+    owner: root
+    mode: '0755'
+
+- name: Deploy telnet session systemd unit
+  template:
+    src: client-telnet-session.service.j2
+    dest: /etc/systemd/system/client-telnet-session.service
+    owner: root
+    mode: '0644'
+
+# --- Persistent SSH session (RST-on-encrypted-TCP target) --------------
+- name: Deploy ssh session script
+  template:
+    src: ssh_session.sh.j2
+    dest: /usr/local/bin/ssh_session.sh
+    owner: root
+    mode: '0755'
+
+- name: Deploy ssh session systemd unit
+  copy:
+    src: client-ssh-session.service
+    dest: /etc/systemd/system/client-ssh-session.service
+    owner: root
+    mode: '0644'
+
+# --- Persistent radio-stream playback (video-streaming stand-in) -------
+- name: Deploy radio-stream client script
+  template:
+    src: radio_client.sh.j2
+    dest: /usr/local/bin/radio_client.sh
+    owner: root
+    mode: '0755'
+
+- name: Deploy radio-stream client systemd unit
+  copy:
+    src: client-radio-stream.service
+    dest: /etc/systemd/system/client-radio-stream.service
+    owner: root
+    mode: '0644'
+
+- name: Enable and start all persistent client sessions
+  systemd:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  loop:
+    - client-telnet-session.service
+    - client-ssh-session.service
+    - client-radio-stream.service

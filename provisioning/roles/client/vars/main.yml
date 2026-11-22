@@ -1,0 +1,14 @@
+aliases:
+  server: 10.1.26.9
+  client: 10.1.26.4
+routings: []
+
+server_ip: 10.1.26.9
+telnet_port: 2323
+radio_stream_port: 9091
+
+telnet_user: victim
+telnet_password: 'VictimPass2025'
+
+diag_user: seedlab
+diag_password: 'Att@ckTCP25'

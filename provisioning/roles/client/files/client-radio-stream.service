@@ -1,0 +1,11 @@
+[Unit]
+Description=Persistent radio-stream playback (RST attack target)
+After=network.target radio-stream.service
+
+[Service]
+ExecStart=/usr/local/bin/radio_client.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

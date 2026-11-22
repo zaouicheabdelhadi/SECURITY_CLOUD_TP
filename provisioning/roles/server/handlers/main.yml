@@ -1,0 +1,15 @@
+- name: Reload SSH service
+  ansible.builtin.systemd:
+    name: ssh
+    state: reloaded
+
+- name: Restart xinetd service
+  ansible.builtin.systemd:
+    name: xinetd
+    state: restarted
+
+- name: Reload systemd and restart radio stream
+  ansible.builtin.systemd:
+    name: radio-stream
+    state: restarted
+    daemon_reload: yes

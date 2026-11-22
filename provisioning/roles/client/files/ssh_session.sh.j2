@@ -1,0 +1,11 @@
+#!/bin/bash
+# Keeps a long-lived SSH session open to the server so the TCP RST attack
+# can be demonstrated against an encrypted TCP connection too. systemd
+# restarts this whenever the session gets killed.
+export SSHPASS='{{ diag_password }}'
+exec sshpass -e ssh \
+  -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null \
+  -o ServerAliveInterval=5 \
+  {{ diag_user }}@{{ server_ip }} \
+  'while true; do echo keepalive; sleep 5; done'

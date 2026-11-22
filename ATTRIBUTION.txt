@@ -1,0 +1,11 @@
+The game design of this project is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+Topology and role structure based on the game design from:
+library-junior-hacker / junior-hacker (https://gitlab.ics.muni.cz/muni-kypo-trainings/games/junior-hacker)
+Cybersecurity Laboratory, Faculty of Informatics, Masaryk University.
+
+Attack tasks (SYN flooding, TCP RST attacks, TCP session hijacking, reverse shell)
+adapted from:
+SEED Labs TCP/IP Attack Lab, Copyright (c) 2018 Wenliang Du.
+Free to use for non-commercial educational purposes. See the attached
+TCP_Attacks.pdf handout for the original license statement.

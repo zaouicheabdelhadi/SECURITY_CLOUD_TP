@@ -1,0 +1,4 @@
+#!/bin/bash
+# Keeps a TCP connection open to the radio-stream service, discarding the
+# data. Stands in for a user "streaming" a video in SEED Labs Task 3.
+exec nc {{ server_ip }} {{ radio_stream_port }} > /dev/null

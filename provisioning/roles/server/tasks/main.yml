@@ -1,0 +1,143 @@
+---
+- name: Adding aliases
+  loop: "{{ aliases | dict2items }}"
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.value }} {{ item.key }}"
+
+# ---------------------------------------------------------------------
+# Diagnostic SSH account (students use this to check server-side state
+# such as netstat -na / sysctl after launching each attack from attacker)
+# ---------------------------------------------------------------------
+- name: Add diagnostic SSH user
+  user:
+    name: "{{ diag_user }}"
+    password: "{{ diag_password | password_hash('sha512') }}"
+    create_home: yes
+    shell: /bin/bash
+    groups: sudo
+    append: yes
+
+- name: Allow password authentication over SSH
+  blockinfile:
+    path: /etc/ssh/sshd_config.d/99-password-auth.conf
+    create: yes
+    block: |
+      PasswordAuthentication yes
+      PermitRootLogin no
+  notify: Reload SSH service
+
+- name: Remove conflicting PasswordAuthentication line from main sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    state: absent
+  notify: Reload SSH service
+
+# ---------------------------------------------------------------------
+# Telnet service (deliberately on a NON-default port so answers can't be
+# copy/pasted from the SEED Labs handout - students must nmap it first)
+# ---------------------------------------------------------------------
+- name: Install telnetd and xinetd
+  apt:
+    name:
+      - telnetd
+      - xinetd
+    update_cache: yes
+
+- name: Add victim telnet/system account
+  user:
+    name: "{{ telnet_user }}"
+    password: "{{ telnet_password | password_hash('sha512') }}"
+    create_home: yes
+    shell: /bin/bash
+
+- name: Configure telnet on the custom port via xinetd
+  copy:
+    dest: /etc/xinetd.d/telnet-custom
+    content: |
+      service telnet
+      {
+        type        = UNLISTED
+        socket_type = stream
+        protocol    = tcp
+        port        = {{ telnet_port }}
+        wait        = no
+        user        = root
+        server      = /usr/sbin/in.telnetd
+        disable     = no
+      }
+  notify: Restart xinetd service
+
+- name: Ensure xinetd is enabled and running
+  service:
+    name: xinetd
+    state: started
+    enabled: yes
+
+# ---------------------------------------------------------------------
+# Custom (non-default) SYN backlog size - this is the value students must
+# read via sysctl for the SYN-flood recon flag
+# ---------------------------------------------------------------------
+- name: Set a custom net.ipv4.tcp_max_syn_backlog value
+  sysctl:
+    name: net.ipv4.tcp_max_syn_backlog
+    value: "{{ syn_backlog }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Make sure SYN cookies start OFF (students must discover/enable them)
+  sysctl:
+    name: net.ipv4.tcp_syncookies
+    value: "0"
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+# ---------------------------------------------------------------------
+# Radio-stream service (stand-in for the SEED Lab's video-streaming task)
+# ---------------------------------------------------------------------
+- name: Copy radio stream server script
+  copy:
+    src: radio_server.py
+    dest: /usr/local/bin/radio_server.py
+    owner: root
+    mode: '0755'
+
+- name: Patch radio stream script with the configured port
+  lineinfile:
+    path: /usr/local/bin/radio_server.py
+    regexp: '^PORT = '
+    line: "PORT = {{ radio_stream_port }}"
+
+- name: Install radio-stream systemd service
+  copy:
+    src: radio-stream.service
+    dest: /etc/systemd/system/radio-stream.service
+    owner: root
+    mode: '0644'
+  notify: Reload systemd and restart radio stream
+
+- name: Ensure radio-stream service is enabled and running
+  systemd:
+    name: radio-stream
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+# ---------------------------------------------------------------------
+# Flags / evidence files
+# ---------------------------------------------------------------------
+- name: Pre-create empty hijack-proof placeholder (so `ls` shows nothing yet)
+  file:
+    path: /tmp/hijack_proof.txt
+    state: absent
+
+- name: Drop the final flag, readable only after a successful reverse shell
+  copy:
+    dest: "/home/{{ telnet_user }}/flag_final.txt"
+    owner: "{{ telnet_user }}"
+    group: "{{ telnet_user }}"
+    mode: '0640'
+    content: "{{ final_flag_token }}\n"

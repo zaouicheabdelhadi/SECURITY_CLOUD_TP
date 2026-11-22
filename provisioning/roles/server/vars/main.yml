@@ -1,0 +1,28 @@
+aliases:
+  server: 10.1.26.9
+  client: 10.1.26.4
+routings: []
+
+# --- Accounts -----------------------------------------------------------
+# Diagnostic SSH account: given to students in the level text so they can
+# log in and check server-side state (netstat, sysctl) after each attack,
+# exactly like the "admin" account in the junior-hacker scenario.
+diag_user: seedlab
+diag_password: 'Att@ckTCP25'
+
+# Telnet victim account: this is the account the "client" machine keeps a
+# permanent telnet session open with. Its credentials are NOT given to
+# students - it only matters because its session is what gets RST'd /
+# hijacked.
+telnet_user: victim
+telnet_password: 'VictimPass2025'
+
+# --- Custom, non-default values (deliberately different from the SEED
+#     Labs handout so answers can't be copy/pasted from the PDF) --------
+telnet_port: 2323
+radio_stream_port: 9091
+syn_backlog: 333
+
+# --- Flags ----------------------------------------------------------------
+hijack_proof_token: "TCPHIJACK-9f41"
+final_flag_token: "SEED-TCPLAB-FINAL-7e2b9c"

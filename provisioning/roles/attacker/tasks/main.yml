@@ -1,0 +1,69 @@
+---
+- name: Adding aliases
+  loop: "{{ aliases | dict2items }}"
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.value }} {{ item.key }}"
+
+- name: Install packet crafting / recon tooling
+  apt:
+    name:
+      - nmap
+      - tcpdump
+      - tshark
+      - python3-scapy
+      - netcat-openbsd
+      - openssh-client
+      - telnet
+    update_cache: yes
+
+- name: Create tools directory
+  file:
+    path: /opt/netwox
+    state: directory
+    owner: user
+    group: user
+    mode: '0755'
+
+- name: Copy netwox/netwag package
+  copy:
+    src: ../files/netwox_3.00.0_amd64.deb
+    dest: /tmp/netwox_3.00.0_amd64.deb
+    owner: root
+    mode: '0644'
+  ignore_errors: true
+  # NOTE for the instructor: provide the netwox/netwag .deb package (or a
+  # build from https://github.com/sfrancis23/netwox) in
+  # provisioning/roles/attacker/files/ before building the sandbox image.
+  # Netwox is no longer maintained/packaged in standard repos, so it must
+  # be shipped as an asset exactly like fcrackzip was in the junior-hacker
+  # scenario. If the package is not supplied, students can still complete
+  # every level with Scapy only (see level hints).
+
+- name: Install netwox deb package
+  apt:
+    deb: /tmp/netwox_3.00.0_amd64.deb
+  ignore_errors: true
+
+- name: Drop a short Scapy cheat-sheet for students who prefer Scapy over netwox
+  copy:
+    dest: /home/user/scapy_cheatsheet.txt
+    owner: user
+    mode: '0644'
+    content: |
+      Quick reminders (full syntax is on you - this is NOT the full answer):
+
+      Start interactive Scapy:   sudo scapy
+
+      Sniff live traffic:
+        sniff(iface="eth0", filter="tcp and host <ip>", count=20)
+
+      Build and send a single spoofed TCP packet:
+        ip  = IP(src="...", dst="...")
+        tcp = TCP(sport=..., dport=..., flags="...", seq=..., ack=...)
+        pkt = ip/tcp            # add "/data" for session hijacking payloads
+        send(pkt, verbose=0)
+
+      RST flag  = "R"
+      SYN flag  = "S"
+      PSH+ACK   = "PA"

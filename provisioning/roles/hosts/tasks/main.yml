@@ -1,0 +1,23 @@
+---
+# Basic configuration of all host devices
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install net-tools
+  apt:
+    name: net-tools
+
+- name: Install unzip
+  apt:
+    name: unzip
+
+- name: Install tcpdump (packet capture, needed to read seq/ack numbers)
+  apt:
+    name: tcpdump
+
+- name: Install netcat-openbsd (used for radio-stream service / reverse shell listener)
+  apt:
+    name: netcat-openbsd
