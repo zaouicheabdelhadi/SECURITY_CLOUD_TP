@@ -22,7 +22,7 @@
     path: /home/seed/scripts
     state: directory
     owner: seed
-    group: user
+    group: seed
     mode: '0755'
 
 - name: Drop Scapy skeleton scripts (students must fill in the blanks themselves)
