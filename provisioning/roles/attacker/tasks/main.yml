@@ -19,16 +19,16 @@
 
 - name: Create scripts directory for Scapy skeletons
   file:
-    path: /home/user/scripts
+    path: /home/seed/scripts
     state: directory
-    owner: user
+    owner: seed
     group: user
     mode: '0755'
 
 - name: Drop Scapy skeleton scripts (students must fill in the blanks themselves)
   copy:
-    dest: "/home/user/scripts/{{ item }}"
-    owner: user
+    dest: "/home/seed/scripts/{{ item }}"
+    owner: seed
     mode: '0644'
   loop:
     - synflood_skeleton.py
@@ -37,14 +37,14 @@
 
 - name: Drop a short Scapy cheat-sheet
   copy:
-    dest: /home/user/scapy_cheatsheet.txt
-    owner: user
+    dest: /home/seed/scapy_cheatsheet.txt
+    owner: seed
     mode: '0644'
     content: |
       Quick reminders (full syntax is on you - this is NOT the full answer):
 
       Start interactive Scapy:   sudo scapy
-      Run a script:              sudo python3 /home/user/scripts/<name>.py
+      Run a script:              sudo python3 /home/seed/scripts/<name>.py
 
       Sniff live traffic (stop with count or Ctrl+C):
         sniff(iface="eth0", filter="tcp and host <ip>", count=20)
@@ -65,6 +65,6 @@
 
       RST flag  = "R"   SYN flag = "S"   PSH+ACK = "PA"
 
-      Scripts in /home/user/scripts/ are skeletons from the SEED Labs PDF,
+      Scripts in /home/seed/scripts/ are skeletons from the SEED Labs PDF,
       adapted to this sandbox - every @@@@ is something YOU must work out
       from your own recon (IP, port, seq/ack...), nothing is filled in for you.

@@ -5,7 +5,7 @@
 Linear training for [CyberRangeCZ Platform](https://docs.platform.cyberrange.cz/), built from the `library-junior-hacker` scenario template and adapted to cover the **SEED Labs TCP/IP Attack Lab** (SYN flooding, TCP RST attacks, TCP session hijacking, reverse shells).
 
 ## Game Levels Summary
-All attacks use **Scapy only** (no Netwox) - skeleton scripts with blanks for students to fill in are provisioned on `attacker` at `/home/user/scripts/`.
+All attacks use **Scapy only** (no Netwox) - skeleton scripts with blanks for students to fill in are provisioned on `attacker` at `/home/seed/scripts/`.
 - recon the LAN with `nmap` (service discovery - IPs and ports deliberately non-default)
 - use a diagnostic SSH account to read kernel TCP parameters with `sysctl`
 - SYN flooding attack (`synflood_skeleton.py`), verified via `ss -tn state syn-recv` and a timed-out connection attempt

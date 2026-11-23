@@ -49,7 +49,7 @@ Total: **20 points**, spread across 9 training levels. Each hint opened costs be
 
 All attacks are performed with **Scapy**, not Netwox. The attached PDF's own Task 1 note explicitly warns that Scapy's packet rate is far lower than Netwox's, so a realistic (large) SYN backlog would never fill in reasonable time with Scapy alone - that's why `net.ipv4.tcp_max_syn_backlog` is set to a small, non-default value (**8**) instead of the PDF's example.
 
-Three skeleton scripts (with blanks the student must fill in from their own recon - not copy/pasteable) are provisioned on `attacker` at `/home/user/scripts/`:
+Three skeleton scripts (with blanks the student must fill in from their own recon - not copy/pasteable) are provisioned on `attacker` at `/home/seed/scripts/`:
 * `synflood_skeleton.py` - loops spoofed SYNs at a target `ip:port`.
 * `rst_attack_skeleton.py` - sniffs one live packet of a session, then sends a matching spoofed RST.
 * `hijack_skeleton.py` - sniffs one live packet, then injects a payload without resetting the connection (reused for both the session-hijacking and reverse-shell levels, with a different injected command).
