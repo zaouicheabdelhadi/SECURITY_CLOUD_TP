@@ -38,6 +38,7 @@
 - name: Drop a short Scapy cheat-sheet
   copy:
     dest: /home/seed/scapy_cheatsheet.txt
+    src: /
     owner: seed
     mode: '0644'
     content: |
